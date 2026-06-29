@@ -1,0 +1,38 @@
+{
+	"schemaVersion": 1,
+	"id": "gridless",
+	"version": "${version}",
+	"name": "Gridless Inventory",
+	"description": "Removes the grid from storage inventories.",
+	"authors": [
+		"Cukkoo12"
+	],
+	"contact": {
+		"homepage": "https://fabricmc.net/",
+		"sources": "https://github.com/FabricMC/fabric-example-mod"
+	},
+	"license": "MIT",
+	"icon": "assets/gridless/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"com.gridless.GridlessMod"
+		],
+		"client": [
+			"com.gridless.client.GridlessModClient"
+		]
+	},
+	"mixins": [
+		"gridless.mixins.json",
+		{
+			"config": "gridless.client.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.19.3",
+		"minecraft": "~1.20.1",
+		"java": ">=17",
+		"fabric-api": "*"
+	}
+}
