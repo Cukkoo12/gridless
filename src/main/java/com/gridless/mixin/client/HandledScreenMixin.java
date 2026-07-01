@@ -291,4 +291,106 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> extends Screen
             }
         }
     }
+
+    @Unique
+    private long gridless$lastPaintTime = 0;
+
+    @Inject(method = "keyPressed", at = @At("HEAD"), cancellable = true)
+    private void gridless$keyPressed(int keyCode, int scanCode, int modifiers, CallbackInfoReturnable<Boolean> cir) {
+        if (this.client == null || this.client.player == null) return;
+        Slot refSlot = gridless$getReferenceSlot();
+        if (refSlot == null) return;
+
+        double mouseX = this.client.mouse.getX() * (double)this.client.getWindow().getScaledWidth() / (double)this.client.getWindow().getWidth();
+        double mouseY = this.client.mouse.getY() * (double)this.client.getWindow().getScaledHeight() / (double)this.client.getWindow().getHeight();
+
+        GridlessStorage storage = (GridlessStorage) this.client.player.getInventory();
+        int offsetX = refSlot.x - 8;
+        int offsetY = refSlot.y - 84;
+        List<PlacedItem> items = storage.gridless$getPlacedItems();
+
+        if (keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_R) {
+            PacketByteBuf buf = PacketByteBufs.create();
+            buf.writeBoolean(true);
+            ClientPlayNetworking.send(com.gridless.network.GridlessNetwork.AUTO_SORT, buf);
+            cir.setReturnValue(true);
+            return;
+        }
+
+        for (int i = items.size() - 1; i >= 0; i--) {
+            PlacedItem item = items.get(i);
+            int localX = (int) item.getX() + offsetX;
+            int localY = (int) item.getY() + offsetY;
+            int drawX = this.x + localX;
+            int drawY = this.y + localY;
+
+            if (mouseX >= drawX && mouseX < drawX + 16 && mouseY >= drawY && mouseY < drawY + 16) {
+                if (this.client.options.dropKey.matchesKey(keyCode, scanCode)) {
+                    PacketByteBuf buf = PacketByteBufs.create();
+                    buf.writeBoolean(true);
+                    buf.writeInt(i);
+                    buf.writeBoolean(Screen.hasControlDown()); // drop entire stack if true
+                    ClientPlayNetworking.send(com.gridless.network.GridlessNetwork.DROP_ITEM, buf);
+                    cir.setReturnValue(true);
+                    return;
+                }
+
+                if (keyCode >= org.lwjgl.glfw.GLFW.GLFW_KEY_1 && keyCode <= org.lwjgl.glfw.GLFW.GLFW_KEY_9) {
+                    int hotbarSlot = keyCode - org.lwjgl.glfw.GLFW.GLFW_KEY_1;
+                    PacketByteBuf buf = PacketByteBufs.create();
+                    buf.writeBoolean(true);
+                    buf.writeInt(i);
+                    buf.writeInt(hotbarSlot);
+                    ClientPlayNetworking.send(com.gridless.network.GridlessNetwork.SWAP_HOTBAR, buf);
+                    cir.setReturnValue(true);
+                    return;
+                }
+            }
+        }
+    }
+
+    @Inject(method = "mouseDragged", at = @At("HEAD"), cancellable = true)
+    private void gridless$mouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY, CallbackInfoReturnable<Boolean> cir) {
+        if (this.client == null || this.client.player == null) return;
+        Slot refSlot = gridless$getReferenceSlot();
+        if (refSlot == null) return;
+
+        ItemStack cursorStack = this.handler.getCursorStack();
+        if (cursorStack.isEmpty()) return;
+
+        double localX = mouseX - this.x;
+        double localY = mouseY - this.y;
+
+        int minX = refSlot.x - 1;
+        int maxX = refSlot.x + 161;
+        int minY = refSlot.y - 1;
+        int maxY = refSlot.y + 53;
+
+        if (localX >= minX && localX <= maxX && localY >= minY && localY <= maxY) {
+            long currentTime = net.minecraft.util.Util.getMeasuringTimeMs();
+            if (currentTime - gridless$lastPaintTime > 60) { // Limit painting speed
+                gridless$lastPaintTime = currentTime;
+                
+                int offsetX = refSlot.x - 8;
+                int offsetY = refSlot.y - 84;
+                float savedX = (float) (localX - 8 - offsetX);
+                float savedY = (float) (localY - 8 - offsetY);
+
+                PacketByteBuf buf = PacketByteBufs.create();
+                buf.writeBoolean(true);
+                buf.writeFloat(savedX);
+                buf.writeFloat(savedY);
+                ClientPlayNetworking.send(com.gridless.network.GridlessNetwork.PAINT_ITEM, buf);
+
+                // Predict on client
+                ItemStack stackToPlace = cursorStack.copy();
+                stackToPlace.setCount(1);
+                GridlessStorage storage = (GridlessStorage) this.client.player.getInventory();
+                storage.gridless$addPlacedItem(new PlacedItem(stackToPlace, savedX, savedY));
+                cursorStack.decrement(1);
+                this.client.player.playSound(net.minecraft.sound.SoundEvents.ENTITY_ITEM_PICKUP, 0.5F, 1.5F);
+            }
+            cir.setReturnValue(true);
+        }
+    }
 }

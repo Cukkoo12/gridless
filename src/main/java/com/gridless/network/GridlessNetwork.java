@@ -21,6 +21,10 @@ public class GridlessNetwork {
     public static final Identifier PICKUP_ITEM = GridlessMod.id("pickup_item");
     public static final Identifier GATHER_ITEMS = GridlessMod.id("gather_items");
     public static final Identifier SHIFT_CLICK_ITEM = GridlessMod.id("shift_click_item");
+    public static final Identifier DROP_ITEM = GridlessMod.id("drop_item");
+    public static final Identifier SWAP_HOTBAR = GridlessMod.id("swap_hotbar");
+    public static final Identifier AUTO_SORT = GridlessMod.id("auto_sort");
+    public static final Identifier PAINT_ITEM = GridlessMod.id("paint_item");
 
     public static void registerC2S() {
         ServerPlayNetworking.registerGlobalReceiver(PLACE_NEW_ITEM, (server, player, handler, buf, responseSender) -> {
@@ -185,6 +189,115 @@ public class GridlessNetwork {
                             }
                             syncToClient(player, isPlayerInventory, items);
                         }
+                    }
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(DROP_ITEM, (server, player, handler, buf, responseSender) -> {
+            boolean isPlayerInventory = buf.readBoolean();
+            int index = buf.readInt();
+            boolean dropAll = buf.readBoolean();
+
+            server.execute(() -> {
+                GridlessStorage storage = isPlayerInventory ? (GridlessStorage) player.getInventory() : null;
+                if (storage != null) {
+                    List<PlacedItem> items = storage.gridless$getPlacedItems();
+                    if (index >= 0 && index < items.size()) {
+                        PlacedItem item = items.get(index);
+                        ItemStack toDrop;
+                        if (dropAll) {
+                            toDrop = item.getStack().copy();
+                            item.getStack().setCount(0);
+                        } else {
+                            toDrop = item.getStack().split(1);
+                        }
+                        
+                        player.dropItem(toDrop, false, true);
+                        
+                        if (item.getStack().isEmpty()) {
+                            items.remove(index);
+                        }
+                        syncToClient(player, isPlayerInventory, items);
+                    }
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(SWAP_HOTBAR, (server, player, handler, buf, responseSender) -> {
+            boolean isPlayerInventory = buf.readBoolean();
+            int index = buf.readInt();
+            int hotbarSlot = buf.readInt();
+
+            server.execute(() -> {
+                GridlessStorage storage = isPlayerInventory ? (GridlessStorage) player.getInventory() : null;
+                if (storage != null && hotbarSlot >= 0 && hotbarSlot < 9) {
+                    List<PlacedItem> items = storage.gridless$getPlacedItems();
+                    if (index >= 0 && index < items.size()) {
+                        PlacedItem item = items.get(index);
+                        ItemStack currentGridless = item.getStack().copy();
+                        ItemStack currentHotbar = player.getInventory().getStack(hotbarSlot).copy();
+
+                        player.getInventory().setStack(hotbarSlot, currentGridless);
+                        if (currentHotbar.isEmpty()) {
+                            items.remove(index);
+                        } else {
+                            item.setStack(currentHotbar);
+                        }
+                        syncToClient(player, isPlayerInventory, items);
+                    }
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(AUTO_SORT, (server, player, handler, buf, responseSender) -> {
+            boolean isPlayerInventory = buf.readBoolean();
+            server.execute(() -> {
+                GridlessStorage storage = isPlayerInventory ? (GridlessStorage) player.getInventory() : null;
+                if (storage != null) {
+                    List<PlacedItem> items = storage.gridless$getPlacedItems();
+                    
+                    java.util.Map<String, List<PlacedItem>> grouped = new java.util.HashMap<>();
+                    for (PlacedItem item : items) {
+                        String name = net.minecraft.registry.Registries.ITEM.getId(item.getStack().getItem()).toString();
+                        grouped.computeIfAbsent(name, k -> new java.util.ArrayList<>()).add(item);
+                    }
+                    
+                    int currentX = 0;
+                    int currentY = 0;
+                    
+                    for (List<PlacedItem> group : grouped.values()) {
+                        for (PlacedItem item : group) {
+                            item.setX((float) currentX);
+                            item.setY((float) currentY);
+                        }
+                        
+                        currentX += 18;
+                        if (currentX > 162 - 18) {
+                            currentX = 0;
+                            currentY += 18;
+                        }
+                    }
+                    syncToClient(player, isPlayerInventory, items);
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(PAINT_ITEM, (server, player, handler, buf, responseSender) -> {
+            boolean isPlayerInventory = buf.readBoolean();
+            float x = buf.readFloat();
+            float y = buf.readFloat();
+
+            server.execute(() -> {
+                GridlessStorage storage = isPlayerInventory ? (GridlessStorage) player.getInventory() : null;
+                if (storage != null) {
+                    ItemStack serverCursor = player.currentScreenHandler.getCursorStack();
+                    if (!serverCursor.isEmpty()) {
+                        ItemStack stackToPlace = serverCursor.copy();
+                        stackToPlace.setCount(1);
+                        serverCursor.decrement(1);
+                        storage.gridless$addPlacedItem(new PlacedItem(stackToPlace, x, y));
+                        syncToClient(player, isPlayerInventory, storage.gridless$getPlacedItems());
                     }
                 }
             });
