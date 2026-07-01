@@ -71,5 +71,27 @@ public abstract class PlayerInventoryMixin implements GridlessStorage {
             }
         }
     }
+    @Shadow @org.spongepowered.asm.mixin.Final public net.minecraft.util.collection.DefaultedList<net.minecraft.item.ItemStack> main;
 
+    @Inject(method = "updateItems", at = @At("HEAD"))
+    public void gridless$updateItems(CallbackInfo ci) {
+        if (this.player.getWorld().isClient) return; // Only process on server to avoid desync
+        boolean changed = false;
+        for (int i = 9; i < 36; i++) {
+            net.minecraft.item.ItemStack stack = this.main.get(i);
+            if (!stack.isEmpty()) {
+                // Rescue item and place it on gridless area randomly
+                int randomX = 8 + (int)(Math.random() * 140);
+                int randomY = 84 + (int)(Math.random() * 30);
+                this.gridlessItems.add(new PlacedItem(stack.copy(), randomX, randomY));
+                
+                // Clear the slot
+                stack.setCount(0);
+                changed = true;
+            }
+        }
+        if (changed && this.player instanceof net.minecraft.server.network.ServerPlayerEntity serverPlayer) {
+            com.gridless.network.GridlessNetwork.syncToClient(serverPlayer, true, this.gridlessItems);
+        }
+    }
 }
