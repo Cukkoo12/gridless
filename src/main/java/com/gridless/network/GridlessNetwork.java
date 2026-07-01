@@ -267,9 +267,29 @@ public class GridlessNetwork {
                     int currentY = 84;
                     
                     for (List<PlacedItem> group : grouped.values()) {
+                        // Merge stacks within the group
+                        for (int i = 0; i < group.size(); i++) {
+                            ItemStack stack1 = group.get(i).getStack();
+                            if (stack1.isEmpty()) continue;
+                            for (int j = i + 1; j < group.size(); j++) {
+                                ItemStack stack2 = group.get(j).getStack();
+                                if (stack2.isEmpty() || !ItemStack.canCombine(stack1, stack2)) continue;
+                                
+                                int space = stack1.getMaxCount() - stack1.getCount();
+                                if (space > 0) {
+                                    int amount = Math.min(space, stack2.getCount());
+                                    stack1.increment(amount);
+                                    stack2.decrement(amount);
+                                }
+                            }
+                        }
+
+                        // Assign coordinates
                         for (PlacedItem item : group) {
-                            item.setX((float) currentX);
-                            item.setY((float) currentY);
+                            if (!item.getStack().isEmpty()) {
+                                item.setX((float) currentX);
+                                item.setY((float) currentY);
+                            }
                         }
                         
                         currentX += 18;
@@ -278,6 +298,10 @@ public class GridlessNetwork {
                             currentY += 18;
                         }
                     }
+                    
+                    // Remove all merged (empty) items
+                    items.removeIf(item -> item.getStack().isEmpty());
+                    
                     syncToClient(player, isPlayerInventory, items);
                 }
             });
