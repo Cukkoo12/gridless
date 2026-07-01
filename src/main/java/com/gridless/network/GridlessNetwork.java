@@ -263,8 +263,8 @@ public class GridlessNetwork {
                         grouped.computeIfAbsent(name, k -> new java.util.ArrayList<>()).add(item);
                     }
                     
-                    int currentX = 0;
-                    int currentY = 0;
+                    int currentX = 8;
+                    int currentY = 84;
                     
                     for (List<PlacedItem> group : grouped.values()) {
                         for (PlacedItem item : group) {
@@ -273,8 +273,8 @@ public class GridlessNetwork {
                         }
                         
                         currentX += 18;
-                        if (currentX > 162 - 18) {
-                            currentX = 0;
+                        if (currentX > 8 + 162 - 18) {
+                            currentX = 8;
                             currentY += 18;
                         }
                     }
