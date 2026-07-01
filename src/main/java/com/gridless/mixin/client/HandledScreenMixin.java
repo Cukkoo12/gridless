@@ -194,6 +194,16 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> extends Screen
             int drawX = this.x + localX;
             int drawY = this.y + localY;
             if (mouseX >= drawX && mouseX < drawX + 16 && mouseY >= drawY && mouseY < drawY + 16) {
+                if (Screen.hasShiftDown()) {
+                    PacketByteBuf buf = PacketByteBufs.create();
+                    buf.writeBoolean(true);
+                    buf.writeInt(i);
+                    ClientPlayNetworking.send(com.gridless.network.GridlessNetwork.SHIFT_CLICK_ITEM, buf);
+                    this.client.player.playSound(net.minecraft.sound.SoundEvents.ENTITY_ITEM_PICKUP, 1.0F, 1.0F);
+                    cir.setReturnValue(true);
+                    return;
+                }
+                
                 if (cursorStack.isEmpty() || (ItemStack.canCombine(cursorStack, item.getStack()) && cursorStack.getCount() < cursorStack.getMaxCount())) {
                     int amountToPick = button == 1 ? (item.getStack().getCount() + 1) / 2 : item.getStack().getCount();
                     if (!cursorStack.isEmpty()) {

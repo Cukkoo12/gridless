@@ -20,6 +20,7 @@ public class GridlessNetwork {
     public static final Identifier MERGE_ITEM = GridlessMod.id("merge_item");
     public static final Identifier PICKUP_ITEM = GridlessMod.id("pickup_item");
     public static final Identifier GATHER_ITEMS = GridlessMod.id("gather_items");
+    public static final Identifier SHIFT_CLICK_ITEM = GridlessMod.id("shift_click_item");
 
     public static void registerC2S() {
         ServerPlayNetworking.registerGlobalReceiver(PLACE_NEW_ITEM, (server, player, handler, buf, responseSender) -> {
@@ -125,6 +126,65 @@ public class GridlessNetwork {
                             }
                         }
                         syncToClient(player, isPlayerInventory, items);
+                    }
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(SHIFT_CLICK_ITEM, (server, player, handler, buf, responseSender) -> {
+            boolean isPlayerInventory = buf.readBoolean();
+            int index = buf.readInt();
+
+            server.execute(() -> {
+                GridlessStorage storage = isPlayerInventory ? (GridlessStorage) player.getInventory() : null;
+                if (storage != null) {
+                    List<PlacedItem> items = storage.gridless$getPlacedItems();
+                    if (index >= 0 && index < items.size()) {
+                        PlacedItem item = items.get(index);
+                        ItemStack stack = item.getStack();
+                        boolean inserted = false;
+                        
+                        // First pass: try to merge into existing stacks
+                        for (net.minecraft.screen.slot.Slot slot : player.currentScreenHandler.slots) {
+                            if (slot.inventory != player.getInventory() || slot.getIndex() < 9) { // Chest slots or Hotbar
+                                ItemStack slotStack = slot.getStack();
+                                if (!slotStack.isEmpty() && ItemStack.canCombine(slotStack, stack)) {
+                                    int space = slot.getMaxItemCount(stack) - slotStack.getCount();
+                                    if (space > 0) {
+                                        int amount = Math.min(space, stack.getCount());
+                                        slotStack.increment(amount);
+                                        stack.decrement(amount);
+                                        slot.markDirty();
+                                        inserted = true;
+                                        if (stack.isEmpty()) break;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Second pass: try to place in empty slots
+                        if (!stack.isEmpty()) {
+                            for (net.minecraft.screen.slot.Slot slot : player.currentScreenHandler.slots) {
+                                if (slot.inventory != player.getInventory() || slot.getIndex() < 9) {
+                                    ItemStack slotStack = slot.getStack();
+                                    if (slotStack.isEmpty() && slot.canInsert(stack)) {
+                                        int space = slot.getMaxItemCount(stack);
+                                        int amount = Math.min(space, stack.getCount());
+                                        slot.setStack(stack.split(amount));
+                                        slot.markDirty();
+                                        inserted = true;
+                                        if (stack.isEmpty()) break;
+                                    }
+                                }
+                            }
+                        }
+
+                        if (inserted) {
+                            if (stack.isEmpty()) {
+                                items.remove(index);
+                            }
+                            syncToClient(player, isPlayerInventory, items);
+                        }
                     }
                 }
             });
